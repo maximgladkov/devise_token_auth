@@ -7,15 +7,20 @@ module DeviseTokenAuth
 
     def create
       @resource            = resource_class.new(sign_up_params)
-      @resource.provider   = "email"
-
-      # honor devise configuration for case_insensitive_keys
-      if resource_class.case_insensitive_keys.include?(:email)
-        @resource.email = sign_up_params[:email].try :downcase
-      else
-        @resource.email = sign_up_params[:email]
+      @resource.provider   = sign_up_params.include?(:email) ? "email" : "phone"
+      
+      case @resource.provider
+      when "email"
+        # honor devise configuration for case_insensitive_keys
+        if resource_class.case_insensitive_keys.include?(:email)
+          @resource.email = sign_up_params[:email].try :downcase
+        else
+          @resource.email = sign_up_params[:email]
+        end
+      when "phone"
+        @resource.phone = sign_up_params[:phone]
       end
-
+      
       # give redirect value from params priority
       @redirect_url = params[:confirm_success_url]
 
@@ -69,7 +74,13 @@ module DeviseTokenAuth
         end
       rescue ActiveRecord::RecordNotUnique
         clean_up_passwords @resource
-        render_create_error_email_already_exists
+        
+        case @resource.provider
+        when "email"
+          render_create_error_email_already_exists
+        when "phone"
+          render_create_error_phone_already_exists
+        end
       end
     end
 
@@ -143,6 +154,14 @@ module DeviseTokenAuth
         status: 'error',
         data:   resource_data,
         errors: [I18n.t("devise_token_auth.registrations.email_already_exists", email: @resource.email)]
+      }, status: 422
+    end
+
+    def render_create_error_phone_already_exists
+      render json: {
+        status: 'error',
+        data:   resource_data,
+        errors: [I18n.t("devise_token_auth.registrations.phone_already_exists", phone: @resource.phone)]
       }, status: 422
     end
 
